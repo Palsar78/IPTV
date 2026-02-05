@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>הנגן שלי - IPTV</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body { font-family: sans-serif; background: #121212; color: white; text-align: center; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        input { width: 80%; padding: 12px; border-radius: 8px; border: none; margin-bottom: 10px; }
+        button { padding: 12px 24px; border-radius: 8px; border: none; background: #007bff; color: white; cursor: pointer; font-weight: bold; }
+        video { width: 100%; border-radius: 12px; margin-top: 20px; background: #000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .status { margin-top: 10px; color: #888; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>נגן IPTV אישי</h1>
+    <input type="text" id="streamUrl" placeholder="הדבק כאן כתובת .m3u8 או קישור לשידור">
+    <br>
+    <button onclick="playStream()">נגן עכשיו</button>
+    <p class="status" id="status"></p>
+
+    <video id="video" controls></video>
+</div>
+
+<script>
+    function playStream() {
+        const video = document.getElementById('video');
+        const url = document.getElementById('streamUrl').value;
+        const status = document.getElementById('status');
+
+        if (!url) {
+            alert("נא להזין כתובת!");
+            return;
+        }
+
+        if (Hls.isSupported()) {
+            const hls = new Hls();
+            hls.loadSource(url);
+            hls.attachMedia(video);
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                video.play();
+                status.innerText = "מנגן: " + url;
+            });
+        } 
+        // תמיכה מובנית ב-Safari (iOS)
+        else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = url;
+            video.addEventListener('loadedmetadata', function() {
+                video.play();
+                status.innerText = "מנגן (Native): " + url;
+            });
+        } else {
+            alert("הדפדפן שלך לא תומך בפורמט הזה.");
+        }
+    }
+</script>
+
+</body>
+</html>
