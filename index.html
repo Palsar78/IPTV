@@ -6,30 +6,43 @@
     <title>הנגן שלי - IPTV</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; text-align: center; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: auto; }
-        input { width: 80%; padding: 12px; border-radius: 8px; border: none; margin-bottom: 10px; }
-        button { padding: 12px 24px; border-radius: 8px; border: none; background: #007bff; color: white; cursor: pointer; font-weight: bold; }
-        video { width: 100%; border-radius: 12px; margin-top: 20px; background: #000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .status { margin-top: 10px; color: #888; font-size: 0.9em; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: white; text-align: center; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: auto; }
+        h1 { font-size: 1.5rem; margin-bottom: 20px; color: #007bff; }
+        input { width: 90%; padding: 15px; border-radius: 10px; border: 1px solid #333; background: #1e1e1e; color: white; margin-bottom: 15px; font-size: 16px; outline: none; }
+        button { width: 95%; padding: 15px; border-radius: 10px; border: none; background: #007bff; color: white; cursor: pointer; font-weight: bold; font-size: 18px; transition: 0.2s; }
+        button:active { background: #0056b3; transform: scale(0.98); }
+        video { width: 100%; border-radius: 12px; margin-top: 25px; background: #000; box-shadow: 0 10px 30px rgba(0,0,0,0.8); display: none; }
+        .status { margin-top: 15px; color: #888; font-size: 0.85em; word-break: break-all; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>נגן IPTV אישי</h1>
-    <input type="text" id="streamUrl" placeholder="הדבק כאן כתובת .m3u8 או קישור לשידור">
+    
+    <input type="text" id="streamUrl" placeholder="הדבק כאן קישור .m3u8">
     <br>
-    <button onclick="playStream()">נגן עכשיו</button>
-    <p class="status" id="status"></p>
+    <button onclick="playStream()">נגן ושמור כתובת</button>
+    
+    <p class="status" id="status">לא נבחר שידור</p>
 
-    <video id="video" controls></video>
+    <video id="video" controls playsinline></video>
 </div>
 
 <script>
+    // פונקציה שרצה ברגע שהדף נטען
+    window.onload = function() {
+        const savedUrl = localStorage.getItem('lastIptvUrl');
+        if (savedUrl) {
+            document.getElementById('streamUrl').value = savedUrl;
+            document.getElementById('status').innerText = "כתובת שמורה נטענה";
+        }
+    };
+
     function playStream() {
         const video = document.getElementById('video');
-        const url = document.getElementById('streamUrl').value;
+        const url = document.getElementById('streamUrl').value.trim();
         const status = document.getElementById('status');
 
         if (!url) {
@@ -37,27 +50,38 @@
             return;
         }
 
+        // שמירת הכתובת בזיכרון המכשיר
+        localStorage.setItem('lastIptvUrl', url);
+        
+        video.style.display = "block"; // הצגת הנגן רק כשיש שידור
+
         if (Hls.isSupported()) {
             const hls = new Hls();
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, function() {
                 video.play();
-                status.innerText = "מנגן: " + url;
+                status.innerText = "מנגן עכשיו...";
+            });
+            hls.on(Hls.Events.ERROR, function() {
+                status.innerText = "שגיאה בטעינת השידור. וודא שהקישור תקין.";
             });
         } 
-        // תמיכה מובנית ב-Safari (iOS)
+        // תמיכה מובנית ב-Safari (iOS/Mac)
         else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = url;
             video.addEventListener('loadedmetadata', function() {
                 video.play();
-                status.innerText = "מנגן (Native): " + url;
+                status.innerText = "מנגן (Native iOS)...";
             });
         } else {
             alert("הדפדפן שלך לא תומך בפורמט הזה.");
         }
     }
 </script>
+
+</body>
+</html>
 
 </body>
 </html>
