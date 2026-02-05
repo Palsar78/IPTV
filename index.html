@@ -3,114 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IPTV Player Pro</title>
+    <title>IPTV MyLogin</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body { font-family: -apple-system, system-ui, sans-serif; background: #121212; color: white; margin: 0; padding: 15px; }
-        .container { max-width: 800px; margin: auto; }
-        input { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #333; background: #1e1e1e; color: white; box-sizing: border-box; margin-bottom: 10px; font-size: 16px; }
-        button { width: 100%; padding: 15px; border-radius: 10px; border: none; background: #007bff; color: white; font-weight: bold; cursor: pointer; font-size: 18px; }
-        #video-container { position: sticky; top: 0; background: #121212; padding-bottom: 10px; z-index: 100; display: none; }
-        video { width: 100%; border-radius: 8px; background: #000; }
-        .channel-list { margin-top: 20px; display: grid; gap: 10px; }
-        .channel-item { background: #252525; padding: 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; }
-        .channel-item:hover { background: #333; }
-        .status { color: #ffcc00; margin: 10px 0; font-size: 0.9em; }
+        body { font-family: -apple-system, sans-serif; background: #000; color: #fff; margin: 0; padding: 20px; }
+        .login-box { background: #1a1a1a; padding: 20px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #333; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .channel-item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; align-items: center; }
+        .channel-item:active { background: #333; }
+        #video-container { position: sticky; top: 0; background: #000; z-index: 1000; display: none; }
+        video { width: 100%; border-radius: 0 0 10px 10px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>ה-IPTV שלי</h1>
-    
-    <div id="setup">
-        <input type="text" id="m3uUrl" placeholder="הדבק כאן את כתובת ה-M3U">
-        <button onclick="loadPlaylist()">טען רשימת ערוצים</button>
-        <div id="proxy-note" class="status" style="display:none;">מנסה לעקוף חסימת שרת...</div>
-    </div>
-
-    <div id="video-container">
-        <video id="video" controls playsinline></video>
-        <h3 id="current-channel"></h3>
-    </div>
-
-    <div id="channelList" class="channel-list"></div>
+<div id="video-container">
+    <video id="video" controls playsinline></video>
+    <div id="playing-name" style="padding: 10px; font-weight: bold; background: #1a1a1a;"></div>
 </div>
+
+<div class="login-box" id="login-ui">
+    <h3>התחברות ל-IPTV</h3>
+    <input type="text" id="host" placeholder="כתובת השרת (למשל: http://pl.ru-tv.site)">
+    <input type="text" id="username" placeholder="שם משתמש">
+    <input type="password" id="password" placeholder="סיסמה">
+    <button onclick="connect()">התחבר וטען ערוצים</button>
+</div>
+
+<div id="list"></div>
 
 <script>
     const video = document.getElementById('video');
-    let hls = new Hls();
+    const hls = new Hls();
 
-    window.onload = () => {
-        const saved = localStorage.getItem('myIptvList');
-        if (saved) {
-            document.getElementById('m3uUrl').value = saved;
-            loadPlaylist();
-        }
-    };
+    function connect() {
+        const host = document.getElementById('host').value.trim();
+        const user = document.getElementById('username').value.trim();
+        const pass = document.getElementById('password').value.trim();
 
-    async function loadPlaylist() {
-        const url = document.getElementById('m3uUrl').value.trim();
-        if (!url) return;
+        if(!host || !user || !pass) return alert("מלא את כל הפרטים");
+
+        // בניית כתובת ה-M3U המלאה
+        const fullUrl = `${host}/get.php?username=${user}&password=${pass}&type=m3u_plus&output=ts`;
         
-        localStorage.setItem('myIptvList', url);
-        const listDiv = document.getElementById('channelList');
-        listDiv.innerHTML = "טוען רשימה... (זה עשוי לקחת כמה שניות)";
+        // שימוש במעקף חסימה
+        const proxy = "https://api.allorigins.win/get?url=" + encodeURIComponent(fullUrl);
 
-        // שימוש במתווך לעקיפת CORS
-        const proxyUrl = "https://cors-anywhere.herokuapp.com/";
-        
-        try {
-            // ניסיון ראשון ישיר, אם נכשל עובר למתווך
-            let response = await fetch(url).catch(() => fetch(proxyUrl + url));
-            const data = await response.text();
-            parseM3U(data);
-        } catch (err) {
-            listDiv.innerHTML = "שגיאה: השרת חוסם את הגישה. נסה להפעיל את הקישור בדפדפן קודם.";
-        }
+        fetch(proxy)
+            .then(response => response.json())
+            .then(data => {
+                parseM3U(data.contents);
+                document.getElementById('login-ui').style.display = 'none';
+            })
+            .catch(err => alert("שגיאת התחברות. וודא שהפרטים נכונים."));
     }
 
     function parseM3U(data) {
         const lines = data.split('\n');
-        const channels = [];
-        let currentName = "";
+        const listDiv = document.getElementById('list');
+        listDiv.innerHTML = '';
 
+        let name = "";
         lines.forEach(line => {
-            line = line.trim();
             if (line.startsWith('#EXTINF:')) {
-                const nameMatch = line.split(',');
-                currentName = nameMatch[nameMatch.length - 1];
+                name = line.split(',').pop();
             } else if (line.startsWith('http')) {
-                channels.push({ name: currentName || "ערוץ ללא שם", url: line });
-                currentName = "";
+                const div = document.createElement('div');
+                div.className = 'channel-item';
+                div.innerHTML = "📺 " + name;
+                const streamUrl = line.trim();
+                div.onclick = () => play(streamUrl, name);
+                listDiv.appendChild(div);
             }
         });
-
-        displayChannels(channels);
     }
 
-    function displayChannels(channels) {
-        const listDiv = document.getElementById('channelList');
-        listDiv.innerHTML = '';
-        if (channels.length === 0) { listDiv.innerHTML = "לא נמצאו ערוצים בקובץ."; return; }
-
-        channels.forEach(ch => {
-            const div = document.createElement('div');
-            div.className = 'channel-item';
-            div.innerHTML = `📺 ${ch.name}`;
-            div.onclick = () => playChannel(ch.url, ch.name);
-            listDiv.appendChild(div);
-        });
-    }
-
-    function playChannel(url, name) {
+    function play(url, name) {
         document.getElementById('video-container').style.display = 'block';
-        document.getElementById('current-channel').innerText = name;
-        window.scrollTo(0, 0);
-
+        document.getElementById('playing-name').innerText = name;
+        window.scrollTo(0,0);
+        
         if (Hls.isSupported()) {
-            hls.destroy();
-            hls = new Hls();
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
@@ -120,9 +94,5 @@
         }
     }
 </script>
-
-</body>
-</html>
-
 </body>
 </html>
