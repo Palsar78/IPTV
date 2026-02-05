@@ -3,79 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>הנגן שלי - IPTV</title>
+    <title>IPTV Player Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: white; text-align: center; margin: 0; padding: 20px; }
-        .container { max-width: 600px; margin: auto; }
-        h1 { font-size: 1.5rem; margin-bottom: 20px; color: #007bff; }
-        input { width: 90%; padding: 15px; border-radius: 10px; border: 1px solid #333; background: #1e1e1e; color: white; margin-bottom: 15px; font-size: 16px; outline: none; }
-        button { width: 95%; padding: 15px; border-radius: 10px; border: none; background: #007bff; color: white; cursor: pointer; font-weight: bold; font-size: 18px; transition: 0.2s; }
-        button:active { background: #0056b3; transform: scale(0.98); }
-        video { width: 100%; border-radius: 12px; margin-top: 25px; background: #000; box-shadow: 0 10px 30px rgba(0,0,0,0.8); display: none; }
-        .status { margin-top: 15px; color: #888; font-size: 0.85em; word-break: break-all; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: #121212; color: white; margin: 0; padding: 15px; }
+        .container { max-width: 800px; margin: auto; }
+        input { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #333; background: #1e1e1e; color: white; box-sizing: border-box; margin-bottom: 10px; }
+        button { width: 100%; padding: 15px; border-radius: 10px; border: none; background: #007bff; color: white; font-weight: bold; cursor: pointer; }
+        
+        #video-container { position: sticky; top: 0; background: #121212; padding-bottom: 10px; z-index: 100; display: none; }
+        video { width: 100%; border-radius: 8px; background: #000; }
+        
+        .channel-list { margin-top: 20px; display: grid; gap: 10px; }
+        .channel-item { background: #252525; padding: 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; transition: 0.2s; }
+        .channel-item:hover { background: #333; }
+        .channel-item b { color: #007bff; margin-left: 10px; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>נגן IPTV אישי</h1>
+    <h1>ה-IPTV שלי</h1>
     
-    <input type="text" id="streamUrl" placeholder="הדבק כאן קישור .m3u8">
-    <br>
-    <button onclick="playStream()">נגן ושמור כתובת</button>
-    
-    <p class="status" id="status">לא נבחר שידור</p>
+    <div id="setup">
+        <input type="text" id="m3uUrl" placeholder="הדבק כאן את כתובת ה-M3U שלך">
+        <button onclick="loadPlaylist()">טען רשימת ערוצים</button>
+    </div>
 
-    <video id="video" controls playsinline></video>
+    <div id="video-container">
+        <video id="video" controls playsinline></video>
+        <h3 id="current-channel">בוחר ערוץ...</h3>
+    </div>
+
+    <div id="channelList" class="channel-list"></div>
 </div>
 
 <script>
-    // פונקציה שרצה ברגע שהדף נטען
-    window.onload = function() {
-        const savedUrl = localStorage.getItem('lastIptvUrl');
-        if (savedUrl) {
-            document.getElementById('streamUrl').value = savedUrl;
-            document.getElementById('status').innerText = "כתובת שמורה נטענה";
+    const video = document.getElementById('video');
+    const hls = new Hls();
+
+    // טעינת כתובת שמורה אם קיימת
+    window.onload = () => {
+        const saved = localStorage.getItem('myIptvList');
+        if (saved) {
+            document.getElementById('m3uUrl').value = saved;
+            loadPlaylist();
         }
     };
 
-    function playStream() {
-        const video = document.getElementById('video');
-        const url = document.getElementById('streamUrl').value.trim();
-        const status = document.getElementById('status');
-
-        if (!url) {
-            alert("נא להזין כתובת!");
-            return;
-        }
-
-        // שמירת הכתובת בזיכרון המכשיר
-        localStorage.setItem('lastIptvUrl', url);
+    async function loadPlaylist() {
+        const url = document.getElementById('m3uUrl').value.trim();
+        if (!url) return alert("נא להזין כתובת");
         
-        video.style.display = "block"; // הצגת הנגן רק כשיש שידור
+        localStorage.setItem('myIptvList', url);
+        const status = document.getElementById('channelList');
+        status.innerHTML = "טוען ערוצים... אנא המתן";
+
+        try {
+            const response = await fetch(url);
+            const data = await response.text();
+            parseM3U(data);
+        } catch (err) {
+            status.innerHTML = "שגיאה בטעינה. וודא שהקישור תקין ומאפשר גישה (CORS).";
+        }
+    }
+
+    function parseM3U(data) {
+        const lines = data.split('\n');
+        const channels = [];
+        let currentChannel = {};
+
+        lines.forEach(line => {
+            line = line.trim();
+            if (line.startsWith('#EXTINF:')) {
+                // חילוץ שם הערוץ
+                const parts = line.split(',');
+                currentChannel.name = parts[parts.length - 1];
+            } else if (line.startsWith('http')) {
+                currentChannel.url = line;
+                channels.push(currentChannel);
+                currentChannel = {};
+            }
+        });
+
+        displayChannels(channels);
+    }
+
+    function displayChannels(channels) {
+        const listDiv = document.getElementById('channelList');
+        listDiv.innerHTML = '';
+
+        channels.forEach(ch => {
+            const div = document.createElement('div');
+            div.className = 'channel-item';
+            div.innerHTML = `<b>📺</b> ${ch.name}`;
+            div.onclick = () => playChannel(ch.url, ch.name);
+            listDiv.appendChild(div);
+        });
+    }
+
+    function playChannel(url, name) {
+        document.getElementById('video-container').style.display = 'block';
+        document.getElementById('current-channel').innerText = name;
+        window.scrollTo(0, 0);
 
         if (Hls.isSupported()) {
-            const hls = new Hls();
             hls.loadSource(url);
             hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                video.play();
-                status.innerText = "מנגן עכשיו...";
-            });
-            hls.on(Hls.Events.ERROR, function() {
-                status.innerText = "שגיאה בטעינת השידור. וודא שהקישור תקין.";
-            });
-        } 
-        // תמיכה מובנית ב-Safari (iOS/Mac)
-        else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = url;
-            video.addEventListener('loadedmetadata', function() {
-                video.play();
-                status.innerText = "מנגן (Native iOS)...";
-            });
-        } else {
-            alert("הדפדפן שלך לא תומך בפורמט הזה.");
+            video.play();
         }
     }
 </script>
