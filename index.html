@@ -3,98 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IPTV MyLogin</title>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <style>
-        body { font-family: -apple-system, sans-serif; background: #000; color: #fff; margin: 0; padding: 20px; }
-        .login-box { background: #1a1a1a; padding: 20px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #333; }
-        input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; box-sizing: border-box; }
-        button { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .channel-item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; align-items: center; }
-        .channel-item:active { background: #333; }
-        #video-container { position: sticky; top: 0; background: #000; z-index: 1000; display: none; }
-        video { width: 100%; border-radius: 0 0 10px 10px; }
-    </style>
+    <title>IPTV Test</title>
 </head>
-<body>
+<body style="background:#000; color:#fff; text-align:center; font-family:sans-serif;">
+    <h2>בדיקת חיבור ישיר</h2>
+    <input type="text" id="link" placeholder="הדבק כאן את הקישור המלא שלך" style="width:90%; padding:10px;">
+    <br><br>
+    <button onclick="play()" style="padding:15px 30px;">נסה לנגן</button>
+    <br><br>
+    <video id="v" controls playsinline style="width:100%; display:none;"></video>
+    <div id="err" style="color:red;"></div>
 
-<div id="video-container">
-    <video id="video" controls playsinline></video>
-    <div id="playing-name" style="padding: 10px; font-weight: bold; background: #1a1a1a;"></div>
-</div>
-
-<div class="login-box" id="login-ui">
-    <h3>התחברות ל-IPTV</h3>
-    <input type="text" id="host" placeholder="כתובת השרת (למשל: http://pl.ru-tv.site)">
-    <input type="text" id="username" placeholder="שם משתמש">
-    <input type="password" id="password" placeholder="סיסמה">
-    <button onclick="connect()">התחבר וטען ערוצים</button>
-</div>
-
-<div id="list"></div>
-
-<script>
-    const video = document.getElementById('video');
-    const hls = new Hls();
-
-    function connect() {
-        const host = document.getElementById('host').value.trim();
-        const user = document.getElementById('username').value.trim();
-        const pass = document.getElementById('password').value.trim();
-
-        if(!host || !user || !pass) return alert("מלא את כל הפרטים");
-
-        // בניית כתובת ה-M3U המלאה
-        const fullUrl = `${host}/get.php?username=${user}&password=${pass}&type=m3u_plus&output=ts`;
-        
-        // שימוש במעקף חסימה
-        const proxy = "https://api.allorigins.win/get?url=" + encodeURIComponent(fullUrl);
-
-        fetch(proxy)
-            .then(response => response.json())
-            .then(data => {
-                parseM3U(data.contents);
-                document.getElementById('login-ui').style.display = 'none';
-            })
-            .catch(err => alert("שגיאת התחברות. וודא שהפרטים נכונים."));
-    }
-
-    function parseM3U(data) {
-        const lines = data.split('\n');
-        const listDiv = document.getElementById('list');
-        listDiv.innerHTML = '';
-
-        let name = "";
-        lines.forEach(line => {
-            if (line.startsWith('#EXTINF:')) {
-                name = line.split(',').pop();
-            } else if (line.startsWith('http')) {
-                const div = document.createElement('div');
-                div.className = 'channel-item';
-                div.innerHTML = "📺 " + name;
-                const streamUrl = line.trim();
-                div.onclick = () => play(streamUrl, name);
-                listDiv.appendChild(div);
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script>
+        function play() {
+            const url = document.getElementById('link').value;
+            const v = document.getElementById('v');
+            v.style.display = "block";
+            
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(url);
+                hls.attachMedia(v);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => v.play());
+                hls.on(Hls.Events.ERROR, (n, data) => {
+                    document.getElementById('err').innerText = "שגיאת נגן: " + data.details;
+                });
+            } else {
+                v.src = url;
+                v.play();
             }
-        });
-    }
-
-    function play(url, name) {
-        document.getElementById('video-container').style.display = 'block';
-        document.getElementById('playing-name').innerText = name;
-        window.scrollTo(0,0);
-        
-        if (Hls.isSupported()) {
-            hls.loadSource(url);
-            hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-        } else {
-            video.src = url;
-            video.play();
         }
-    }
-</script>
-</body>
-</html>
+    </script>
 </body>
 </html>
