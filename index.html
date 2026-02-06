@@ -3,25 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IPTV Final Try</title>
+    <title>IPTV to VLC</title>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #000; color: #fff; margin: 0; padding: 10px; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #1a1a1a; color: #fff; box-sizing: border-box; }
-        button { width: 100%; padding: 15px; background: #28a745; border: none; border-radius: 8px; color: white; font-weight: bold; }
-        #video-container { width: 100%; position: sticky; top: 0; background: #000; z-index: 100; padding-bottom: 10px; }
-        video { width: 100%; aspect-ratio: 16/9; background: #111; border-radius: 8px; }
-        .item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; justify-content: space-between; }
+        body { font-family: -apple-system, sans-serif; background: #000; color: #fff; margin: 0; padding: 20px; }
+        .card { background: #1a1a1a; padding: 20px; border-radius: 15px; border: 1px solid #333; margin-bottom: 20px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #111; margin-bottom: 5px; border-radius: 8px; }
+        .vlc-btn { background: #ff8800; color: #000; padding: 5px 10px; border-radius: 5px; font-weight: bold; font-size: 12px; }
     </style>
 </head>
 <body>
 
-<div id="video-container">
-    <video id="video" controls playsinline webkit-playsinline autoplay></video>
-    <div id="status" style="padding:10px; font-size:12px; color:#007bff;">בחר ערוץ מהרשימה</div>
+<div class="card">
+    <h2>הטלוויזיה שלי</h2>
+    <p style="font-size: 14px; color: #888;">לחץ על ערוץ כדי לפתוח אותו ב-VLC</p>
+    <input type="text" id="m3uUrl" placeholder="הדבק קישור M3U">
+    <button onclick="loadList()">טען ערוצים</button>
 </div>
 
-<input type="text" id="m3uUrl" placeholder="הדבק קישור M3U">
-<button onclick="loadList()">טען ערוצים</button>
 <div id="list"></div>
 
 <script>
@@ -30,57 +30,47 @@
     async function loadList() {
         const m3u = document.getElementById('m3uUrl').value.trim();
         if(!m3u) return;
-        localStorage.setItem('iptv_link', m3u);
-        document.getElementById('list').innerHTML = "טוען רשימה...";
+        localStorage.setItem('iptv_vlc_link', m3u);
+        const listDiv = document.getElementById('list');
+        listDiv.innerHTML = "טוען רשימה...";
         
         try {
             const res = await fetch(`${proxy}?url=${encodeURIComponent(m3u)}`);
             const text = await res.text();
             const lines = text.split('\n');
-            const listDiv = document.getElementById('list');
             listDiv.innerHTML = '';
             
             let name = "";
             lines.forEach(line => {
-                if (line.startsWith('#EXTINF:')) name = line.split(',').pop();
-                else if (line.startsWith('http')) {
+                if (line.startsWith('#EXTINF:')) {
+                    name = line.split(',').pop();
+                } else if (line.startsWith('http')) {
                     const div = document.createElement('div');
                     div.className = 'item';
-                    div.innerHTML = `<span>${name || "ערוץ"}</span> <span>📺</span>`;
-                    const url = line.trim();
-                    div.onclick = () => play(url, name);
+                    const streamUrl = line.trim();
+                    div.innerHTML = `<span>${name || "ערוץ כללי"}</span> <span class="vlc-btn">פתח ב-VLC</span>`;
+                    
+                    // הפקודה שפותחת את VLC באייפון
+                    div.onclick = () => {
+                        const vlcUrl = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(streamUrl)}`;
+                        window.location.href = vlcUrl;
+                    };
+                    
                     listDiv.appendChild(div);
+                    name = "";
                 }
             });
-        } catch (e) { alert("שגיאה בטעינה"); }
-    }
-
-    function play(url, name) {
-        const v = document.getElementById('video');
-        document.getElementById('status').innerText = "מנסה לנגן: " + name;
-        
-        // נסיון אחרון: שינוי פורמט ל-m3u8 (חובה לאייפון)
-        let finalUrl = url;
-        if (finalUrl.includes('output=ts')) {
-            finalUrl = finalUrl.replace('output=ts', 'output=m3u8');
-        }
-
-        // באייפון ספציפית, לפעמים עדיף לנסות בלי ה-Proxy עבור הזרם עצמו 
-        // אם הספק חוסם את ה-IP של Cloudflare
-        v.src = finalUrl; 
-        
-        v.play().catch(() => {
-            // אם נכשל בלי פרוקסי, ננסה עם פרוקסי כגיבוי
-            console.log("Direct play failed, trying proxy...");
-            v.src = `${proxy}?url=${encodeURIComponent(finalUrl)}`;
-            v.play();
-        });
+        } catch (e) { listDiv.innerHTML = "שגיאה בטעינה. וודא שהקישור תקין."; }
     }
 
     window.onload = () => {
-        const saved = localStorage.getItem('iptv_link');
-        if(saved) { document.getElementById('m3uUrl').value = saved; loadList(); }
+        const saved = localStorage.getItem('iptv_vlc_link');
+        if(saved) {
+            document.getElementById('m3uUrl').value = saved;
+            loadList();
+        }
     };
 </script>
+
 </body>
 </html>
