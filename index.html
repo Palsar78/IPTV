@@ -3,39 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IPTV Final</title>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <title>IPTV Final Try</title>
     <style>
         body { font-family: -apple-system, sans-serif; background: #000; color: #fff; margin: 0; padding: 10px; }
         input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #1a1a1a; color: #fff; box-sizing: border-box; }
-        button { width: 100%; padding: 15px; background: #007bff; border: none; border-radius: 8px; color: white; font-weight: bold; }
-        #video-container { width: 100%; position: sticky; top: 0; background: #000; z-index: 100; margin-bottom: 10px; }
+        button { width: 100%; padding: 15px; background: #28a745; border: none; border-radius: 8px; color: white; font-weight: bold; }
+        #video-container { width: 100%; position: sticky; top: 0; background: #000; z-index: 100; padding-bottom: 10px; }
         video { width: 100%; aspect-ratio: 16/9; background: #111; border-radius: 8px; }
-        .item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-        .item:active { background: #333; }
+        .item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; justify-content: space-between; }
     </style>
 </head>
 <body>
 
 <div id="video-container">
-    <video id="video" controls playsinline webkit-playsinline></video>
-    <div id="current-ch" style="padding:10px; font-size:14px; color:#aaa;">בחר ערוץ...</div>
+    <video id="video" controls playsinline webkit-playsinline autoplay></video>
+    <div id="status" style="padding:10px; font-size:12px; color:#007bff;">בחר ערוץ מהרשימה</div>
 </div>
 
 <input type="text" id="m3uUrl" placeholder="הדבק קישור M3U">
-<button onclick="loadList()">טען רשימה</button>
-
+<button onclick="loadList()">טען ערוצים</button>
 <div id="list"></div>
 
 <script>
     const proxy = "https://crimson-shape-c77d.evgeni3-1db.workers.dev/";
-    let hls = null;
 
     async function loadList() {
         const m3u = document.getElementById('m3uUrl').value.trim();
         if(!m3u) return;
-        localStorage.setItem('last_m3u', m3u);
-        document.getElementById('list').innerHTML = "טוען...";
+        localStorage.setItem('iptv_link', m3u);
+        document.getElementById('list').innerHTML = "טוען רשימה...";
         
         try {
             const res = await fetch(`${proxy}?url=${encodeURIComponent(m3u)}`);
@@ -50,41 +46,39 @@
                 else if (line.startsWith('http')) {
                     const div = document.createElement('div');
                     div.className = 'item';
-                    div.innerHTML = `<span>${name || "ערוץ"}</span> <span>▶️</span>`;
+                    div.innerHTML = `<span>${name || "ערוץ"}</span> <span>📺</span>`;
                     const url = line.trim();
                     div.onclick = () => play(url, name);
                     listDiv.appendChild(div);
                 }
             });
-        } catch (e) { alert("שגיאה בטעינת הרשימה"); }
+        } catch (e) { alert("שגיאה בטעינה"); }
     }
 
     function play(url, name) {
         const v = document.getElementById('video');
-        document.getElementById('current-ch').innerText = "מנגן: " + name;
-        window.scrollTo(0, 0);
-
-        // שינוי פורמט ל-m3u8 אם אפשר (אייפון מעדיף את זה)
-        let finalUrl = url;
-        if (finalUrl.includes('output=ts')) finalUrl = finalUrl.replace('output=ts', 'output=m3u8');
+        document.getElementById('status').innerText = "מנסה לנגן: " + name;
         
-        const proxiedUrl = `${proxy}?url=${encodeURIComponent(finalUrl)}`;
-
-        if (Hls.isSupported()) {
-            if (hls) hls.destroy();
-            hls = new Hls();
-            hls.loadSource(proxiedUrl);
-            hls.attachMedia(v);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => v.play());
-        } else {
-            // תמיכה ישירה באייפון
-            v.src = proxiedUrl;
-            v.play();
+        // נסיון אחרון: שינוי פורמט ל-m3u8 (חובה לאייפון)
+        let finalUrl = url;
+        if (finalUrl.includes('output=ts')) {
+            finalUrl = finalUrl.replace('output=ts', 'output=m3u8');
         }
+
+        // באייפון ספציפית, לפעמים עדיף לנסות בלי ה-Proxy עבור הזרם עצמו 
+        // אם הספק חוסם את ה-IP של Cloudflare
+        v.src = finalUrl; 
+        
+        v.play().catch(() => {
+            // אם נכשל בלי פרוקסי, ננסה עם פרוקסי כגיבוי
+            console.log("Direct play failed, trying proxy...");
+            v.src = `${proxy}?url=${encodeURIComponent(finalUrl)}`;
+            v.play();
+        });
     }
 
     window.onload = () => {
-        const saved = localStorage.getItem('last_m3u');
+        const saved = localStorage.getItem('iptv_link');
         if(saved) { document.getElementById('m3uUrl').value = saved; loadList(); }
     };
 </script>
