@@ -29,7 +29,6 @@
 </div>
 
 <script>
-    // הכתובת של ה-Worker שלך
     const proxy = "https://crimson-shape-c77d.evgeni3-1db.workers.dev/";
 
     async function loadList() {
@@ -46,7 +45,7 @@
             const data = await response.text();
             parse(data);
         } catch (e) {
-            listDiv.innerHTML = "שגיאה בטעינה. וודא שה-Worker פעיל.";
+            listDiv.innerHTML = "שגיאה בטעינה.";
         }
     }
 
@@ -64,32 +63,42 @@
                 const div = document.createElement('div');
                 div.className = 'item';
                 div.innerHTML = "📺 " + (currentName || "ערוץ ללא שם");
-                const url = line;
-                div.onclick = () => play(`${proxy}?url=${encodeURIComponent(url)}`, currentName);
+                const streamUrl = line; // הקישור המקורי
+                div.onclick = () => play(streamUrl, currentName);
                 listDiv.appendChild(div);
                 currentName = "";
             }
         });
     }
 
-    function play(url, name) {
+    function play(originalUrl, name) {
         const v = document.getElementById('video');
         v.style.display = 'block';
         document.getElementById('current').innerText = name;
         window.scrollTo(0, 0);
 
+        // אנחנו שולחים לנגן את הכתובת דרך ה-Proxy
+        const proxiedUrl = `${proxy}?url=${encodeURIComponent(originalUrl)}`;
+
         if (Hls.isSupported()) {
-            const hls = new Hls();
-            hls.loadSource(url);
+            const hls = new Hls({
+                xhrSetup: function(xhr, url) {
+                    // מוודא שכל חתיכת וידאו עוברת דרך ה-Proxy שלך
+                    if (!url.includes(proxy)) {
+                        xhr.open('GET', `${proxy}?url=${encodeURIComponent(url)}`, true);
+                    }
+                }
+            });
+            hls.loadSource(proxiedUrl);
             hls.attachMedia(v);
             hls.on(Hls.Events.MANIFEST_PARSED, () => v.play());
         } else {
-            v.src = url;
+            // לאייפון (ספארי) יש תמיכה טבעית, ננסה לשלוח לו את הקישור המלווה ב-Proxy
+            v.src = proxiedUrl;
             v.play();
         }
     }
 
-    // טעינה אוטומטית אם יש קישור שמור
     window.onload = () => {
         const saved = localStorage.getItem('savedM3u');
         if(saved) {
