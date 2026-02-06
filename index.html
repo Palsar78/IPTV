@@ -3,16 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IPTV VLC Search</title>
+    <title>IPTV Smart List</title>
     <style>
         body { font-family: -apple-system, sans-serif; background: #000; color: #fff; margin: 0; padding: 20px; }
         .card { background: #1a1a1a; padding: 20px; border-radius: 15px; border: 1px solid #333; margin-bottom: 20px; position: sticky; top: 10px; z-index: 100; }
         input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; box-sizing: border-box; font-size: 16px; }
-        button { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
-        #searchBar { background: #333; border: 1px solid #007bff; display: none; }
-        .item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #111; margin-bottom: 5px; border-radius: 8px; }
-        .vlc-btn { background: #ff8800; color: #000; padding: 5px 10px; border-radius: 5px; font-weight: bold; font-size: 12px; }
-        .no-results { text-align: center; color: #888; margin-top: 20px; }
+        button { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        #searchBar { background: #333; border: 1px solid #007bff; display: none; margin-top: 10px; }
+        .section-title { font-size: 14px; color: #007bff; margin: 15px 5px 5px; font-weight: bold; }
+        .item { padding: 15px; border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center; background: #111; margin-bottom: 5px; border-radius: 8px; }
+        .item-info { display: flex; align-items: center; flex-grow: 1; cursor: pointer; }
+        .fav-star { font-size: 20px; margin-left: 15px; cursor: pointer; color: #444; transition: 0.2s; }
+        .fav-star.active { color: #ffcc00; }
+        .vlc-btn { background: #ff8800; color: #000; padding: 6px 12px; border-radius: 6px; font-weight: bold; font-size: 12px; white-space: nowrap; }
     </style>
 </head>
 <body>
@@ -24,89 +27,110 @@
     <input type="text" id="searchBar" placeholder="חפש ערוץ..." onkeyup="filterChannels()">
 </div>
 
-<div id="list"></div>
+<div id="favoritesSection" style="display:none;">
+    <div class="section-title">⭐ ערוצים מועדפים</div>
+    <div id="favList"></div>
+</div>
+
+<div id="allSection">
+    <div class="section-title" id="allTitle">📺 כל הערוצים</div>
+    <div id="list"></div>
+</div>
 
 <script>
     const proxy = "https://crimson-shape-c77d.evgeni3-1db.workers.dev/";
-    let allChannels = []; // משתנה שישמור את כל הערוצים בזיכרון
+    let allChannels = [];
+    let favorites = JSON.parse(localStorage.getItem('iptv_favs')) || [];
 
     async function loadList() {
         const m3u = document.getElementById('m3uUrl').value.trim();
         if(!m3u) return;
         localStorage.setItem('iptv_vlc_link', m3u);
         const listDiv = document.getElementById('list');
-        const searchBar = document.getElementById('searchBar');
-        
         listDiv.innerHTML = "טוען רשימה...";
-        searchBar.style.display = "none";
         
         try {
             const res = await fetch(`${proxy}?url=${encodeURIComponent(m3u)}`);
             const text = await res.text();
             const lines = text.split('\n');
-            
-            allChannels = []; // איפוס הרשימה
+            allChannels = [];
             let currentName = "";
             
             lines.forEach(line => {
-                if (line.startsWith('#EXTINF:')) {
-                    currentName = line.split(',').pop().trim();
-                } else if (line.startsWith('http')) {
-                    allChannels.push({
-                        name: currentName || "ערוץ כללי",
-                        url: line.trim()
-                    });
+                if (line.startsWith('#EXTINF:')) currentName = line.split(',').pop().trim();
+                else if (line.startsWith('http')) {
+                    allChannels.push({ name: currentName || "ערוץ כללי", url: line.trim() });
                     currentName = "";
                 }
             });
             
-            displayChannels(allChannels);
-            if (allChannels.length > 0) searchBar.style.display = "block";
-            
-        } catch (e) { 
-            listDiv.innerHTML = "שגיאה בטעינה."; 
-        }
+            document.getElementById('searchBar').style.display = "block";
+            render();
+        } catch (e) { listDiv.innerHTML = "שגיאה בטעינה."; }
     }
 
-    function displayChannels(channels) {
-        const listDiv = document.getElementById('list');
-        listDiv.innerHTML = '';
+    function toggleFav(name, url, event) {
+        event.stopPropagation();
+        const index = favorites.findIndex(f => f.url === url);
+        if (index > -1) favorites.splice(index, 1);
+        else favorites.push({ name, url });
         
-        if (channels.length === 0) {
-            listDiv.innerHTML = '<div class="no-results">לא נמצאו ערוצים</div>';
-            return;
+        localStorage.setItem('iptv_favs', JSON.stringify(favorites));
+        render();
+    }
+
+    function render(filtered = null) {
+        const listDiv = document.getElementById('list');
+        const favDiv = document.getElementById('favList');
+        const favSection = document.getElementById('favoritesSection');
+        const channelsToDisplay = filtered || allChannels;
+
+        // רינדור מועדפים
+        favDiv.innerHTML = '';
+        if (favorites.length > 0 && !filtered) {
+            favSection.style.display = "block";
+            favorites.forEach(ch => favDiv.appendChild(createItem(ch, true)));
+        } else {
+            favSection.style.display = "none";
         }
 
-        channels.forEach(ch => {
-            const div = document.createElement('div');
-            div.className = 'item';
-            div.innerHTML = `<span>${ch.name}</span> <span class="vlc-btn">פתח ב-VLC</span>`;
-            div.onclick = () => {
-                const vlcUrl = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(ch.url)}`;
-                window.location.href = vlcUrl;
-            };
-            listDiv.appendChild(div);
+        // רינדור כל השאר
+        listDiv.innerHTML = '';
+        channelsToDisplay.forEach(ch => {
+            const isFav = favorites.some(f => f.url === ch.url);
+            listDiv.appendChild(createItem(ch, isFav));
         });
     }
 
-    // פונקציית החיפוש
+    function createItem(ch, isFav) {
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.innerHTML = `
+            <div class="item-info" onclick="openVLC('${ch.url}')">
+                <span class="fav-star ${isFav ? 'active' : ''}" onclick="toggleFav('${ch.name}', '${ch.url}', event)">★</span>
+                <span>${ch.name}</span>
+            </div>
+            <div class="vlc-btn" onclick="openVLC('${ch.url}')">צפה</div>
+        `;
+        return div;
+    }
+
+    function openVLC(url) {
+        window.location.href = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(url)}`;
+    }
+
     function filterChannels() {
         const query = document.getElementById('searchBar').value.toLowerCase();
-        const filtered = allChannels.filter(ch => 
-            ch.name.toLowerCase().includes(query)
-        );
-        displayChannels(filtered);
+        if (!query) return render();
+        const filtered = allChannels.filter(ch => ch.name.toLowerCase().includes(query));
+        render(filtered);
     }
 
     window.onload = () => {
         const saved = localStorage.getItem('iptv_vlc_link');
-        if(saved) {
-            document.getElementById('m3uUrl').value = saved;
-            loadList();
-        }
+        if(saved) { document.getElementById('m3uUrl').value = saved; loadList(); }
     };
 </script>
-
 </body>
 </html>
 
