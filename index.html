@@ -3,64 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IPTV to VLC</title>
+    <title>IPTV VLC Search</title>
     <style>
         body { font-family: -apple-system, sans-serif; background: #000; color: #fff; margin: 0; padding: 20px; }
-        .card { background: #1a1a1a; padding: 20px; border-radius: 15px; border: 1px solid #333; margin-bottom: 20px; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; box-sizing: border-box; }
-        button { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .card { background: #1a1a1a; padding: 20px; border-radius: 15px; border: 1px solid #333; margin-bottom: 20px; position: sticky; top: 10px; z-index: 100; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
+        #searchBar { background: #333; border: 1px solid #007bff; display: none; }
         .item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #111; margin-bottom: 5px; border-radius: 8px; }
         .vlc-btn { background: #ff8800; color: #000; padding: 5px 10px; border-radius: 5px; font-weight: bold; font-size: 12px; }
+        .no-results { text-align: center; color: #888; margin-top: 20px; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>הטלוויזיה שלי</h2>
-    <p style="font-size: 14px; color: #888;">לחץ על ערוץ כדי לפתוח אותו ב-VLC</p>
+    <h2 style="margin-top:0;">הטלוויזיה שלי</h2>
     <input type="text" id="m3uUrl" placeholder="הדבק קישור M3U">
     <button onclick="loadList()">טען ערוצים</button>
+    <input type="text" id="searchBar" placeholder="חפש ערוץ..." onkeyup="filterChannels()">
 </div>
 
 <div id="list"></div>
 
 <script>
     const proxy = "https://crimson-shape-c77d.evgeni3-1db.workers.dev/";
+    let allChannels = []; // משתנה שישמור את כל הערוצים בזיכרון
 
     async function loadList() {
         const m3u = document.getElementById('m3uUrl').value.trim();
         if(!m3u) return;
         localStorage.setItem('iptv_vlc_link', m3u);
         const listDiv = document.getElementById('list');
+        const searchBar = document.getElementById('searchBar');
+        
         listDiv.innerHTML = "טוען רשימה...";
+        searchBar.style.display = "none";
         
         try {
             const res = await fetch(`${proxy}?url=${encodeURIComponent(m3u)}`);
             const text = await res.text();
             const lines = text.split('\n');
-            listDiv.innerHTML = '';
             
-            let name = "";
+            allChannels = []; // איפוס הרשימה
+            let currentName = "";
+            
             lines.forEach(line => {
                 if (line.startsWith('#EXTINF:')) {
-                    name = line.split(',').pop();
+                    currentName = line.split(',').pop().trim();
                 } else if (line.startsWith('http')) {
-                    const div = document.createElement('div');
-                    div.className = 'item';
-                    const streamUrl = line.trim();
-                    div.innerHTML = `<span>${name || "ערוץ כללי"}</span> <span class="vlc-btn">פתח ב-VLC</span>`;
-                    
-                    // הפקודה שפותחת את VLC באייפון
-                    div.onclick = () => {
-                        const vlcUrl = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(streamUrl)}`;
-                        window.location.href = vlcUrl;
-                    };
-                    
-                    listDiv.appendChild(div);
-                    name = "";
+                    allChannels.push({
+                        name: currentName || "ערוץ כללי",
+                        url: line.trim()
+                    });
+                    currentName = "";
                 }
             });
-        } catch (e) { listDiv.innerHTML = "שגיאה בטעינה. וודא שהקישור תקין."; }
+            
+            displayChannels(allChannels);
+            if (allChannels.length > 0) searchBar.style.display = "block";
+            
+        } catch (e) { 
+            listDiv.innerHTML = "שגיאה בטעינה."; 
+        }
+    }
+
+    function displayChannels(channels) {
+        const listDiv = document.getElementById('list');
+        listDiv.innerHTML = '';
+        
+        if (channels.length === 0) {
+            listDiv.innerHTML = '<div class="no-results">לא נמצאו ערוצים</div>';
+            return;
+        }
+
+        channels.forEach(ch => {
+            const div = document.createElement('div');
+            div.className = 'item';
+            div.innerHTML = `<span>${ch.name}</span> <span class="vlc-btn">פתח ב-VLC</span>`;
+            div.onclick = () => {
+                const vlcUrl = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(ch.url)}`;
+                window.location.href = vlcUrl;
+            };
+            listDiv.appendChild(div);
+        });
+    }
+
+    // פונקציית החיפוש
+    function filterChannels() {
+        const query = document.getElementById('searchBar').value.toLowerCase();
+        const filtered = allChannels.filter(ch => 
+            ch.name.toLowerCase().includes(query)
+        );
+        displayChannels(filtered);
     }
 
     window.onload = () => {
@@ -71,6 +106,9 @@
         }
     };
 </script>
+
+</body>
+</html>
 
 </body>
 </html>
