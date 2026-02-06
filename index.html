@@ -3,35 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IPTV Premium</title>
+    <title>IPTV Final</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body { font-family: -apple-system, sans-serif; background: #000; color: #fff; margin: 0; padding: 0; overflow-x: hidden; }
-        .header { padding: 20px; background: #1a1a1a; border-bottom: 1px solid #333; }
-        input { width: 90%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #444; background: #222; color: #fff; font-size: 16px; }
-        button { width: 90%; padding: 12px; background: #007bff; border: none; border-radius: 8px; color: white; font-weight: bold; }
-        #video-wrapper { width: 100%; position: sticky; top: 0; background: #000; z-index: 1000; display: none; }
-        video { width: 100%; aspect-ratio: 16 / 9; background: #000; }
-        .list { padding: 10px; }
-        .item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; align-items: center; }
+        body { font-family: -apple-system, sans-serif; background: #000; color: #fff; margin: 0; padding: 10px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #1a1a1a; color: #fff; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; background: #007bff; border: none; border-radius: 8px; color: white; font-weight: bold; }
+        #video-container { width: 100%; position: sticky; top: 0; background: #000; z-index: 100; margin-bottom: 10px; }
+        video { width: 100%; aspect-ratio: 16/9; background: #111; border-radius: 8px; }
+        .item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
         .item:active { background: #333; }
-        .item-icon { margin-left: 15px; font-size: 1.2em; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h2>הטלוויזיה שלי</h2>
-    <input type="text" id="m3uUrl" placeholder="הדבק קישור M3U כאן">
-    <button onclick="loadList()">טען ערוצים</button>
+<div id="video-container">
+    <video id="video" controls playsinline webkit-playsinline></video>
+    <div id="current-ch" style="padding:10px; font-size:14px; color:#aaa;">בחר ערוץ...</div>
 </div>
 
-<div id="video-wrapper">
-    <video id="video" controls playsinline x5-playsinline webkit-playsinline></video>
-    <div id="current-title" style="padding:10px; font-size: 0.9em; background: #111;"></div>
-</div>
+<input type="text" id="m3uUrl" placeholder="הדבק קישור M3U">
+<button onclick="loadList()">טען רשימה</button>
 
-<div id="channelList" class="list"></div>
+<div id="list"></div>
 
 <script>
     const proxy = "https://crimson-shape-c77d.evgeni3-1db.workers.dev/";
@@ -40,84 +34,59 @@
     async function loadList() {
         const m3u = document.getElementById('m3uUrl').value.trim();
         if(!m3u) return;
+        localStorage.setItem('last_m3u', m3u);
+        document.getElementById('list').innerHTML = "טוען...";
         
-        localStorage.setItem('iptv_link', m3u);
-        const listDiv = document.getElementById('channelList');
-        listDiv.innerHTML = "טוען... אנא המתן";
-
         try {
-            // טעינת הרשימה דרך ה-Proxy
-            const response = await fetch(`${proxy}?url=${encodeURIComponent(m3u)}`);
-            const data = await response.text();
-            parse(data);
-        } catch (e) {
-            listDiv.innerHTML = "שגיאה בחיבור לשרת.";
-        }
-    }
-
-    function parse(data) {
-        const lines = data.split('\n');
-        const listDiv = document.getElementById('channelList');
-        listDiv.innerHTML = '';
-        let currentName = "";
-
-        lines.forEach(line => {
-            line = line.trim();
-            if (line.startsWith('#EXTINF:')) {
-                currentName = line.split(',').pop();
-            } else if (line.startsWith('http')) {
-                const div = document.createElement('div');
-                div.className = 'item';
-                div.innerHTML = `<span class="item-icon">📺</span> <span>${currentName || "ערוץ כללי"}</span>`;
-                const streamUrl = line;
-                div.onclick = () => play(streamUrl, currentName);
-                listDiv.appendChild(div);
-                currentName = "";
-            }
-        });
+            const res = await fetch(`${proxy}?url=${encodeURIComponent(m3u)}`);
+            const text = await res.text();
+            const lines = text.split('\n');
+            const listDiv = document.getElementById('list');
+            listDiv.innerHTML = '';
+            
+            let name = "";
+            lines.forEach(line => {
+                if (line.startsWith('#EXTINF:')) name = line.split(',').pop();
+                else if (line.startsWith('http')) {
+                    const div = document.createElement('div');
+                    div.className = 'item';
+                    div.innerHTML = `<span>${name || "ערוץ"}</span> <span>▶️</span>`;
+                    const url = line.trim();
+                    div.onclick = () => play(url, name);
+                    listDiv.appendChild(div);
+                }
+            });
+        } catch (e) { alert("שגיאה בטעינת הרשימה"); }
     }
 
     function play(url, name) {
-        const wrapper = document.getElementById('video-wrapper');
         const v = document.getElementById('video');
-        const title = document.getElementById('current-title');
-        
-        wrapper.style.display = 'block';
-        title.innerText = "משדר עכשיו: " + name;
+        document.getElementById('current-ch').innerText = "מנגן: " + name;
         window.scrollTo(0, 0);
 
-        // יצירת קישור שעובר דרך ה-Proxy
-        const finalStreamUrl = `${proxy}?url=${encodeURIComponent(url)}`;
+        // שינוי פורמט ל-m3u8 אם אפשר (אייפון מעדיף את זה)
+        let finalUrl = url;
+        if (finalUrl.includes('output=ts')) finalUrl = finalUrl.replace('output=ts', 'output=m3u8');
+        
+        const proxiedUrl = `${proxy}?url=${encodeURIComponent(finalUrl)}`;
 
         if (Hls.isSupported()) {
             if (hls) hls.destroy();
-            hls = new Hls({
-                enableWorker: true,
-                lowLatencyMode: true,
-                // הגדרות למניעת תקיעות ב-Proxy
-                xhrSetup: function(xhr) {
-                    xhr.withCredentials = false;
-                }
-            });
-            hls.loadSource(finalStreamUrl);
+            hls = new Hls();
+            hls.loadSource(proxiedUrl);
             hls.attachMedia(v);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => v.play().catch(e => console.log("Auto-play blocked")));
-        } 
-        else if (v.canPlayType('application/vnd.apple.mpegurl')) {
-            // תמיכה ישירה בספארי אייפון
-            v.src = finalStreamUrl;
-            v.addEventListener('loadedmetadata', () => v.play());
+            hls.on(Hls.Events.MANIFEST_PARSED, () => v.play());
+        } else {
+            // תמיכה ישירה באייפון
+            v.src = proxiedUrl;
+            v.play();
         }
     }
 
     window.onload = () => {
-        const saved = localStorage.getItem('iptv_link');
-        if(saved) {
-            document.getElementById('m3uUrl').value = saved;
-            loadList();
-        }
+        const saved = localStorage.getItem('last_m3u');
+        if(saved) { document.getElementById('m3uUrl').value = saved; loadList(); }
     };
 </script>
-
 </body>
 </html>
