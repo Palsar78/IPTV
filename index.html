@@ -3,37 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IPTV Test</title>
-</head>
-<body style="background:#000; color:#fff; text-align:center; font-family:sans-serif;">
-    <h2>בדיקת חיבור ישיר</h2>
-    <input type="text" id="link" placeholder="הדבק כאן את הקישור המלא שלך" style="width:90%; padding:10px;">
-    <br><br>
-    <button onclick="play()" style="padding:15px 30px;">נסה לנגן</button>
-    <br><br>
-    <video id="v" controls playsinline style="width:100%; display:none;"></video>
-    <div id="err" style="color:red;"></div>
-
+    <title>IPTV My App</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script>
-        function play() {
-            const url = document.getElementById('link').value;
-            const v = document.getElementById('v');
-            v.style.display = "block";
-            
-            if (Hls.isSupported()) {
-                const hls = new Hls();
-                hls.loadSource(url);
-                hls.attachMedia(v);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => v.play());
-                hls.on(Hls.Events.ERROR, (n, data) => {
-                    document.getElementById('err').innerText = "שגיאת נגן: " + data.details;
-                });
-            } else {
-                v.src = url;
-                v.play();
-            }
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #000; color: #fff; text-align: center; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: auto; }
+        input { width: 100%; padding: 15px; margin: 10px 0; border-radius: 10px; border: 1px solid #333; background: #1a1a1a; color: #fff; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; background: #007bff; border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; }
+        video { width: 100%; border-radius: 10px; display: none; margin-top: 20px; background: #000; }
+        .list { margin-top: 20px; text-align: right; }
+        .item { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; }
+        .item:active { background: #333; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>IPTV Player</h2>
+    <input type="text" id="m3uUrl" placeholder="הדבק כאן את קישור ה-M3U המלא שלך">
+    <button onclick="loadList()">טען ערוצים</button>
+    
+    <video id="video" controls playsinline></video>
+    <h3 id="current"></h3>
+    <div id="channelList" class="list"></div>
+</div>
+
+<script>
+    // הכתובת של ה-Worker שלך
+    const proxy = "https://crimson-shape-c77d.evgeni3-1db.workers.dev/";
+
+    async function loadList() {
+        const m3u = document.getElementById('m3uUrl').value.trim();
+        if(!m3u) return alert("נא להזין קישור");
+        
+        localStorage.setItem('savedM3u', m3u);
+        const listDiv = document.getElementById('channelList');
+        listDiv.innerHTML = "טוען ערוצים...";
+
+        try {
+            const finalUrl = `${proxy}?url=${encodeURIComponent(m3u)}`;
+            const response = await fetch(finalUrl);
+            const data = await response.text();
+            parse(data);
+        } catch (e) {
+            listDiv.innerHTML = "שגיאה בטעינה. וודא שה-Worker פעיל.";
         }
-    </script>
+    }
+
+    function parse(data) {
+        const lines = data.split('\n');
+        const listDiv = document.getElementById('channelList');
+        listDiv.innerHTML = '';
+        let currentName = "";
+
+        lines.forEach(line => {
+            line = line.trim();
+            if (line.startsWith('#EXTINF:')) {
+                currentName = line.split(',').pop();
+            } else if (line.startsWith('http')) {
+                const div = document.createElement('div');
+                div.className = 'item';
+                div.innerHTML = "📺 " + (currentName || "ערוץ ללא שם");
+                const url = line;
+                div.onclick = () => play(`${proxy}?url=${encodeURIComponent(url)}`, currentName);
+                listDiv.appendChild(div);
+                currentName = "";
+            }
+        });
+    }
+
+    function play(url, name) {
+        const v = document.getElementById('video');
+        v.style.display = 'block';
+        document.getElementById('current').innerText = name;
+        window.scrollTo(0, 0);
+
+        if (Hls.isSupported()) {
+            const hls = new Hls();
+            hls.loadSource(url);
+            hls.attachMedia(v);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => v.play());
+        } else {
+            v.src = url;
+            v.play();
+        }
+    }
+
+    // טעינה אוטומטית אם יש קישור שמור
+    window.onload = () => {
+        const saved = localStorage.getItem('savedM3u');
+        if(saved) {
+            document.getElementById('m3uUrl').value = saved;
+            loadList();
+        }
+    };
+</script>
+
 </body>
 </html>
